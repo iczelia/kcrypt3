@@ -76,3 +76,32 @@ of 32 points the values of which are known (they are either the padding or
 the ciphertext). We then construct a polynomial which passes through these
 points via Lagrange interpolation and evaluate it at the first 16 elements
 of the field - [0, 16). The result is the plaintext.
+
+==> 3. Guarantees
+
+    As a matter of fact:
+  
+- Matrix product is an operation with the computational complexity usually
+  implemented as O(n^2) < O(f(x)) <= O(n^3) - e.g. Strassen's algorithm is
+  generally better than the naive O(n^3) method. However, the reference
+  implementation accepts the cubic time complexity.
+- Lagrange interpolation is also nominally an O(n^3) algorithm. That said,
+  because we operate in an integral domain, we generally don't care about
+  numerical instability which de facto prevents an optimisation to O(n^2)
+  complexity in a lot of scientific computing implementations. Such an
+  optimisation is present in the reference implementation.
+
+    The algorithm exhibits rather unfortunate running time characteristics,
+however, the author believes that a constant time implementation of such a
+method would be feasible and thus make the method not inherently insecure
+when processing data that is not at rest (due to timing attacks and other
+means of information leakage).
+
+    The author believes that the choices of intractable problems made by
+kcrypt2b (which stray further away from kcrypt2 in its reliance on the
+polynomial reconstruction problem) is interesting and educational. While
+programming errors may render a particular implementation insecure, the
+author believes that the algorithm itself has a reasonable foundation.
+That said, neither kcrypt2 or kcrypt2b have been subject to any kind of
+scrutiny and cryptanalysis by third parties, hence its use is strongly
+discouraged.
