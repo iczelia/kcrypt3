@@ -76,7 +76,7 @@ S V mtprod(u32 r[16][16], u8 sbox[256]) {
   Fi(16, Fj(16, r[i][j] = temp[i][j]))}
 S V mtcrypt(key * k[16], u8 padding[16], u8 sbox[256]) { // tr(R) = tr((R' * sbox)^r * sbox)
   u32 r[16][16]; Fi(16, Fj(16, r[i][j] = triple32(mtn(k[i])))) mtprod(r, sbox);
-  Fi(16, rotl16(r[i], i)) mtprod(r, sbox); Fi(16, padding[i] = r[i][i] & 0xFF);}
+  Fi(16, rotl16(r[i], i)) mtprod(r, sbox); Fi(16, padding[i] = ((r[i][i] >> 16) ^ r[i][i]) & 0xFF);}
 // ========================================================
 // Block cipher
 // ========================================================
