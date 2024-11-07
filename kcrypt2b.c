@@ -46,8 +46,8 @@ S u32 mtn(key * k) {
 // ========================================================
 // http://www.math.sci.hiroshima-u.ac.jp/m-mat/MT/efaq.html
 // ========================================================
-S void rotl8(u32 * r, int d) {
-  u32 t[8]; Fi(8, t[i] = r[(i + d) % 8]); memcpy(r, t, 32);}
+S void rotl16(u32 * r, int d) {
+  u32 t[16]; Fi(16, t[i] = r[(i + d) % 16]); memcpy(r, t, 64);}
 S u32 triple32(u32 x) { // exact bias: 0.020888578919738908
   x ^= x >> 17; x *= 0xed5ad4bbU;
   x ^= x >> 11; x *= 0xac4c1b51U;
@@ -76,7 +76,7 @@ S V mtprod(u32 r[16][16], u8 sbox[256]) {
   Fi(16, Fj(16, r[i][j] = temp[i][j]))}
 S V mtcrypt(key * k[16], u8 padding[16], u8 sbox[256]) { // tr(R) = tr((R' * sbox)^r * sbox)
   u32 r[16][16]; Fi(16, Fj(16, r[i][j] = triple32(mtn(k[i])))) mtprod(r, sbox);
-  Fi(16, rotl8(r[i], i)) mtprod(r, sbox); Fi(16, padding[i] = r[i][i] & 0xFF);}
+  Fi(16, rotl16(r[i], i)) mtprod(r, sbox); Fi(16, padding[i] = r[i][i] & 0xFF);}
 // ========================================================
 // Block cipher
 // ========================================================
