@@ -7,7 +7,7 @@ list of related concepts/topics:
 
 # known problems
 
-key reuse attack
+key reuse attack afefcting **kcrypt2, kcrypt2b and kcrypt2c** (but not any of the latter versions).
 
 ```
  0 [14:47] Desktop/workspace/kcrypt2@main % ./kcrypt2c -g key.kck
