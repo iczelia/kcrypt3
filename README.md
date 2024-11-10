@@ -5,14 +5,16 @@ list of related concepts/topics:
 - https://en.wikipedia.org/wiki/Finite_field
 - https://en.wikipedia.org/wiki/McEliece_cryptosystem
 
-known vulnerabilities: key reuse attack
+# known problems
+
+key reuse attack
 
 ```
  0 [14:47] Desktop/workspace/kcrypt2@main % ./kcrypt2c -g key.kck
  0 [14:47] Desktop/workspace/kcrypt2@main % ./kcrypt2c -e key.kck stuff.txt stuff.enc
  0 [14:47] Desktop/workspace/kcrypt2@main % ./kcrypt2c -e key.kck stuff2.txt stuff2.enc
  0 [14:47] Desktop/workspace/kcrypt2@main % xxd stuff.enc
-00000000: 36ed df7c 1238 7e58 c699 5795 e76f 2fdd  6..|.8~X..W..o/.
+00000000: 36ed df7c 1238 7e58 c699 5795 e76f 2fdd  6..|.8~X..W..o/. <-- separate block, encoded to the same value
 00000010: 36ac e258 5a5e 394b 6a3a 4eda 6e69 5381  6..XZ^9Kj:N.niS.
  0 [14:47] Desktop/workspace/kcrypt2@main % xxd stuff2.enc
 00000000: 36ed df7c 1238 7e58 c699 5795 e76f 2fdd  6..|.8~X..W..o/.
@@ -22,3 +24,5 @@ This is message 1
  0 [14:48] Desktop/workspace/kcrypt2@main % cat stuff2.txt
 This is message 2
 ```
+
+Due to a lack of randomised IV, same plaintext + same key = same ciphertext.
