@@ -208,12 +208,14 @@ void kc2dD(u8 blk[16], u32 key[15], u32 ctr) {
   lagrange(xv, yv, 36, poly);
   Fi(16, blk[i] = horner(poly, 35, i));}
 S V kc2dEF(FILE * in, FILE * out, u32 k[15]) {
+  u32 iv[4]; fread(iv, 4, 4, rng); Fi(4, k[i] ^= iv[i]) fwrite(iv, 4, 4, out);
   u8 buf[16] = { 0xAA }; int ctr = 0;
   long sz; while((sz = fread(buf, 1, 16, in)) > 0) {
     if (sz < 16) buf[15] = sz; kc2dE(buf, k, ctr++);
     fwrite(buf, 16, 1, out);  memset(buf, 0xAA, 16);
   }}
 S V kc2dDF(FILE * in, FILE * out, u32 k[15]) {
+  u32 iv[4]; fread(iv, 4, 4, in); Fi(4, k[i] ^= iv[i]) 
   u8 buf1[16], buf2[16], sz; int ctr = 0;
   if (fread(buf1, 16, 1, in) != 1) return;
   for (; fread(buf2, 16, 1, in) == 1; memcpy(buf1, buf2, 16)) {
@@ -224,7 +226,7 @@ S V kc2dDF(FILE * in, FILE * out, u32 k[15]) {
 #define E(x) { fprintf(stderr, x); exit(1); }
 S void keygen(FILE * out) {
   u8 buf[60]; fread(buf, sizeof(buf), 1, rng); fwrite(buf, sizeof(buf), 1, out);}
-S void keyget(FILE * in, u32 k[15]) { Fi(15, fread(&k[i], 1, 4, in)) } // Big Endian?
+S void keyget(FILE * in, u32 k[15]) { Fi(15, fread(&k[i], 1, 4, in)) }
 S FILE * xopen(const char * file, const char * mode) {
   FILE * f = fopen(file, mode); if(!f) { perror("fopen"); exit(1); } else return f;}
 int main(int argc, char * argv[]) {
