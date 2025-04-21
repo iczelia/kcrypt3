@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 //      KCrypt3 - 3rd iteration of the KCrypt algorithm.
-//      Written on Sunday, 26th of January 2025 by Kamila Szewczyk.
+//      Written on Sunday, 20th of April 2025 by Kamila Szewczyk.
 // ---------------------------------------------------------------------------
 #include <stdint.h>
 #include <stdio.h>
@@ -13,12 +13,10 @@
 #include "yarg.h"
 
 // ---------------------------------------------------------------------------
-//      Galois field tables and factorial cache.
+//      Galois field tables.
 // ---------------------------------------------------------------------------
 typedef uint8_t gf;
-typedef unsigned _BitInt(1300) uint1300_t;
 static gf LOG[256], EXP[510], PROD[256][256];
-static uint1300_t FACT[208];
 static void gentab(gf poly) {
   for (int l = 0, b = 1; l < 255; l++) {
     LOG[b] = l;  EXP[l] = EXP[l + 255] = b;
@@ -28,8 +26,6 @@ static void gentab(gf poly) {
   for (int i = 1; i < 256; i++)
     for (int j = 1; j < 256; j++)
       PROD[i][j] = EXP[LOG[i] + LOG[j]];
-  int k = 0;
-  for (FACT[k] = 1; ++k < 208; FACT[k] = FACT[k - 1] * k);
 }
 #define gf_mul(a, b) PROD[a][b]
 static gf gf_div(gf a, gf b) {
@@ -69,78 +65,70 @@ static gf horner(gf * coef, int n, gf x) {
 }
 
 // ---------------------------------------------------------------------------
-//      Generates the field permutation for the associated index (key)
-//      using the factorial number system.
+//      Feistel Network.
 // ---------------------------------------------------------------------------
-static void key_perm(gf perm[208], uint1300_t i) {
-  int j, k;
-  for (k = 0; k < 208; ++k) {
-    perm[k] = i / FACT[208 - 1 - k];
-    i = i % FACT[208 - 1 - k];
+static void fisher(gf k[64], gf x[64]) {
+  for (int i = 63; i > 0; i--) {
+    int j = k[i] % (i + 1);
+    gf t = x[i]; x[i] = x[j]; x[j] = t;
   }
-  for (k = 208 - 1; k > 0; --k)
-    for (j = k - 1; j >= 0; --j)
-      if (perm[j] <= perm[k])
-        perm[k]++;
-  for (k = 0; k < 208; ++k)
-    perm[k] += 48;
 }
-
-// ---------------------------------------------------------------------------
-//      Block cipher.
-// ---------------------------------------------------------------------------
-typedef struct { uint32_t k3[16]; uint1300_t pi; } block_key_t;
-
-#define ROTL2K(x, b) (uint1300_t)(((x) << (b)) | ((x) >> (1300 - (b))))
-
-static void advance_key(block_key_t * key) {
-  key->pi = ROTL2K(key->pi, 1) + 1;
-  for (int i = 0; i < 16; i++) {
-    if (key->k3[i] & 0x80000000)
-      key->k3[i] = (key->k3[i] << 1) ^ 0x1EDC6F41;
-    else
-      key->k3[i] <<= 1;
+static void fisher32(gf k[32], gf x[32]) {
+  for (int i = 31; i > 0; i--) {
+    int j = k[i] % (i + 1);
+    gf t = x[i]; x[i] = x[j]; x[j] = t;
   }
-  uint32_t tmp = key->k3[0];
-  for (int i = 0; i < 15; i++)
-    key->k3[i] = key->k3[i + 1];
-  key->k3[15] = tmp;
 }
-
-static void write32_le_buf(uint32_t val, gf * buf) {
-  for (int i = 0; i < 4; i++)
-    buf[i] = (val >> (i * 8)) & 0xff;
+static void feistelF(gf b[32], gf k1[32], gf k2[64]) {
+  gf x[64], y[64], coeff[64] = { 0 };
+  for (int i = 0; i < 64; i++) x[i] = i;
+  for (int i = 0; i < 32; i++) y[i] = b[i] + i, y[i + 32] = k1[i] + i;
+  fisher(k2, x);  lagrange(x, y, 64, coeff);
+  for (int i = 0; i < 32; i++) b[i] = horner(coeff, 63, 255 - i);
 }
-static void read32_le_buf(uint32_t * val, gf * buf) {
-  *val = 0;
-  for (int i = 0; i < 4; i++)
-    *val |= buf[i] << (i * 8);
-}
-
-static void encode_block(gf in[32], gf out[32],
-    uint32_t IV, block_key_t key) {
-  gf x[48], y[48], coeff[48] = { 0 }, perm[208];
-  for (int i = 0; i < 48; i++) x[i] = i;
-  for (int i = 0; i < 32; i++) y[i] = in[i];
-  write32_le_buf(IV, y + 32);
-  for (int i = 0; i < 3; i++)
-    write32_le_buf(key.k3[i], y + 36 + i * 4);
-  lagrange(x, y, 48, coeff); key_perm(perm, key.pi);
-  for (int i = 0; i < 32; i++) out[i] = horner(coeff, 47, perm[207 - i]);
-}
-
-static void decode_block(gf in[32], gf out[32],
-    uint32_t IV, block_key_t key) {
-  gf x[48], y[48], coeff[48] = { 0 }, perm[208];
-  key_perm(perm, key.pi);
-  for (int i = 0; i < 16; i++) x[i] = i + 32;
-  write32_le_buf(IV, y);
-  for (int i = 0; i < 3; i++)
-    write32_le_buf(key.k3[i], y + 4 + i * 4);
+static void keysched(gf in[32], gf k2[64], gf out[32], gf next[32]) {
+  gf x[32], y[32], coeff[32] = { 0 };
+  for (int i = 0; i < 32; i++) x[i] = i, y[i] = in[i] + i;
+  lagrange(x, y, 32, coeff);  fisher32(k2, x);
   for (int i = 0; i < 32; i++)
-    x[i + 16] = perm[207 - i], y[i + 16] = in[i];
-  lagrange(x, y, 48, coeff);
-  for (int i = 0; i < 32; i++) out[i] = horner(coeff, 47, i);
+    out[i] = horner(coeff, 31, 64 + x[i]),
+    next[i] = horner(coeff, 31, 128 + x[i]),
+    k2[i] = horner(coeff, 31, 192 + x[i]);
+}
+static void feistel0(gf L[32], gf R[32], gf k1[3][32], gf k2[64]) {
+  for (int round = 0; round < 3; round++) {
+    gf temp[32];
+    memcpy(temp, R, 32);
+    feistelF(R, k1[round], k2);
+    for (int i = 0; i < 32; i++) R[i] ^= L[i];
+    memcpy(L, temp, 32);
+  }
+}
+static void feistel1(gf L[32], gf R[32], gf k1[3][32], gf k2[64]) {
+  for (int round = 2; round >= 0; round--) {
+    gf temp[32];
+    memcpy(temp, L, 32);
+    feistelF(L, k1[round], k2);
+    for (int i = 0; i < 32; i++) L[i] ^= R[i];
+    memcpy(R, temp, 32);
+  }
+}
+typedef struct { gf k1[32]; gf k2[64]; } block_key_t;
+static void encode_block(gf in[64], gf blk[64], uint32_t IV, block_key_t * key) {
+  gf keys[3][32];  memcpy(blk, in, 64);
+  for (int i = 0; i < 4; i++) key->k1[i] += (IV >> (i * 8)) & 0xff;
+  keysched(key->k1, key->k2, keys[0], key->k1);
+  keysched(key->k1, key->k2, keys[1], key->k1);
+  keysched(key->k1, key->k2, keys[2], key->k1);
+  feistel0(blk, blk + 32, keys, key->k2);
+}
+static void decode_block(gf in[64], gf blk[64], uint32_t IV, block_key_t * key) {
+  gf keys[3][32];  memcpy(blk, in, 64);
+  for (int i = 0; i < 4; i++) key->k1[i] += (IV >> (i * 8)) & 0xff;
+  keysched(key->k1, key->k2, keys[0], key->k1);
+  keysched(key->k1, key->k2, keys[1], key->k1);
+  keysched(key->k1, key->k2, keys[2], key->k1);
+  feistel1(blk, blk + 32, keys, key->k2);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +159,8 @@ static void secrandom(void * buf, size_t len) {
   int fd = open("/dev/urandom", O_RDONLY);
   if (fd < 0)
     eprintf("Could not open `/dev/urandom': %s\n", strerror(errno));
-  read(fd, buf, len);
+  if (read(fd, buf, len) < 0)
+    eprintf("Could not read from `/dev/urandom': %s\n", strerror(errno));
   close(fd);
 }
 #elif __MSDOS__
@@ -179,7 +168,8 @@ static void secrandom(void * buf, size_t len) { // Doug Kaufman's NOISE.SYS
   FILE * f = fopen("/dev/urandom$", "rb");
   if (!f)
     eprintf("Could not open `/dev/urandom$': %s\n", strerror(errno));
-  fread(buf, 1, len, f);
+  if (fread(buf, 1, len, f) < len)
+    eprintf("Could not read from `/dev/urandom$': %s\n", strerror(errno));
   fclose(f);
 }
 #endif
@@ -205,6 +195,15 @@ typedef struct {
     };
   };
 } cipher_aux_t;
+static void write32_le_buf(uint32_t val, gf * buf) {
+  for (int i = 0; i < 4; i++)
+    buf[i] = (val >> (i * 8)) & 0xff;
+}
+static void read32_le_buf(uint32_t * val, gf * buf) {
+  *val = 0;
+  for (int i = 0; i < 4; i++)
+    *val |= buf[i] << (i * 8);
+}
 static size_t cipher_aux_fread(void * ptr, size_t size,
     size_t nmemb, cipher_aux_t * stream) {
   if (stream->type == CIPHER_STREAM_FILE) {
@@ -223,6 +222,8 @@ static size_t cipher_aux_fread(void * ptr, size_t size,
 }
 static size_t cipher_aux_fwrite(const void * ptr, size_t size,
     size_t nmemb, cipher_aux_t * stream) {
+  if (nmemb == 0 || size == 0)
+    return 0;
   if (stream->type == CIPHER_STREAM_FILE) {
     if(fwrite(ptr, size, nmemb, stream->file) != nmemb)
       eprintf("Could not write to the output file.\n", strerror(errno));
@@ -274,80 +275,76 @@ static uint32_t cipher_put_header(char * hdr, mode_params_t * params) {
 // ---------------------------------------------------------------------------
 static void encode_ctr(mode_params_t * params) {
   uint32_t IV = cipher_put_header("KC3CTR", params);
-  gf in[32] = { 0 }, out[32]; int8_t read = 0;
-  while ((read = cipher_aux_fread(in, 1, 32, &params->input)) > 0) {
-    for (int8_t i = read; i < 32; i++) in[i] = 32 - read;
-    encode_block(in, out, IV, params->key);
+  gf in[64] = { 0 }, out[64]; int8_t read = 0;
+  while ((read = cipher_aux_fread(in, 1, 63, &params->input)) > 0) {
+    for (int8_t i = read; i < 63; i++) in[i] = 63 - read;  in[63] = read;
+    encode_block(in, out, IV, &params->key);
     if (params->pcb)
       params->pcb(cipher_aux_ftell(&params->input), params->input.max);
-    cipher_aux_fwrite(&read, 1, 1, &params->output);
-    cipher_aux_fwrite(out, 1, 32, &params->output);
-    IV++; advance_key(&params->key);
+    cipher_aux_fwrite(out, 1, 64, &params->output);
+    IV++;
   }
 }
 
 static void decode_ctr(mode_params_t * params) {
   uint32_t IV = cipher_check_header(params);
-  gf in[32], out[32]; int8_t read = 0;
-  while (cipher_aux_fread(&read, 1, 1, &params->input) > 0) {
-    if (cipher_aux_fread(in, 1, 32, &params->input) != 32)
+  gf in[64], out[64]; int8_t read = 63;
+  while (read == 63) {
+    if (cipher_aux_fread(in, 1, 64, &params->input) != 64)
       eprintf("Truncated input.\n");
-    decode_block(in, out, IV, params->key);
+    decode_block(in, out, IV, &params->key);
     if (params->pcb)
       params->pcb(cipher_aux_ftell(&params->input), params->input.max);
-    cipher_aux_fwrite(out, 1, read, &params->output);
-    IV++; advance_key(&params->key);
+    cipher_aux_fwrite(out, 1, read = out[63], &params->output);
+    IV++;
   }
 }
 
 // ---------------------------------------------------------------------------
-//      OFB mode of operation. Assumes buffers are aligned to 32 bytes.
+//      OFB mode of operation. Assumes buffers are aligned to 64 bytes.
 // ---------------------------------------------------------------------------
 static void encode_ofb(mode_params_t * params) {
   uint32_t IV = cipher_put_header("KC3OFB", params);
-  gf in[32] = { 0 }, out[32], prev_out[32]; int8_t read;
-  read = cipher_aux_fread(in, 1, 32, &params->input);
-  for (int8_t i = read; i < 32; i++) in[i] = 32 - read;
-  encode_block(in, prev_out, IV, params->key);
+  gf in[64] = { 0 }, out[64], prev_out[64]; int8_t read;
+  read = cipher_aux_fread(in, 1, 63, &params->input);
+  for (int8_t i = read; i < 63; i++) in[i] = 63 - read;  in[63] = read;
+  encode_block(in, prev_out, IV, &params->key);
   if (params->pcb)
     params->pcb(cipher_aux_ftell(&params->input), params->input.max);
-  cipher_aux_fwrite(&read, 1, 1, &params->output);
-  cipher_aux_fwrite(prev_out, 1, 32, &params->output);
-  IV++; advance_key(&params->key);
-  while ((read = cipher_aux_fread(in, 1, 32, &params->input)) > 0) {
-    for (int8_t i = read; i < 32; i++) in[i] = 32 - read;
-    for (int i = 0; i < 32; i++) in[i] ^= prev_out[i];
-    encode_block(in, out, IV, params->key);
+  cipher_aux_fwrite(prev_out, 1, 64, &params->output);
+  IV++;
+  while ((read = cipher_aux_fread(in, 1, 63, &params->input)) > 0) {
+    for (int8_t i = read; i < 63; i++) in[i] = 63 - read;  in[63] = read;
+    for (int i = 0; i < 64; i++) in[i] ^= prev_out[i];
+    encode_block(in, out, IV, &params->key);
     if (params->pcb)
       params->pcb(cipher_aux_ftell(&params->input), params->input.max);
-    cipher_aux_fwrite(&read, 1, 1, &params->output);
-    cipher_aux_fwrite(out, 1, 32, &params->output);
-    IV++; advance_key(&params->key);
-    memcpy(prev_out, out, 32);
+    cipher_aux_fwrite(out, 1, 64, &params->output);
+    IV++;
+    memcpy(prev_out, out, 64);
   }
 }
 
 static void decode_ofb(mode_params_t * params) {
   uint32_t IV = cipher_check_header(params);
-  gf in[32], prev_in[32], out[32]; int8_t read;
-  read = cipher_aux_fread(&read, 1, 1, &params->input);
-  if (cipher_aux_fread(prev_in, 1, 32, &params->input) != 32)
+  gf in[64], prev_in[64], out[64]; int8_t read;
+  if (cipher_aux_fread(prev_in, 1, 64, &params->input) != 64)
     eprintf("Truncated input.\n");
-  decode_block(prev_in, out, IV, params->key);
+  decode_block(prev_in, out, IV, &params->key);
   if (params->pcb)
     params->pcb(cipher_aux_ftell(&params->input), params->input.max);
-  cipher_aux_fwrite(out, 1, read, &params->output);
-  IV++; advance_key(&params->key);
-  while ((read = cipher_aux_fread(&read, 1, 1, &params->input)) > 0) {
-    if (cipher_aux_fread(in, 1, 32, &params->input) != 32)
+  cipher_aux_fwrite(out, 1, read = out[63], &params->output);
+  IV++;
+  while (read == 63) {
+    if (cipher_aux_fread(in, 1, 64, &params->input) != 64)
       eprintf("Truncated input.\n");
-    decode_block(in, out, IV, params->key);
+    decode_block(in, out, IV, &params->key);
     if (params->pcb)
       params->pcb(cipher_aux_ftell(&params->input), params->input.max);
-    for (int i = 0; i < 32; i++) out[i] ^= prev_in[i];
-    cipher_aux_fwrite(out, 1, read, &params->output);
-    IV++; advance_key(&params->key);
-    memcpy(prev_in, in, 32);
+    for (int i = 0; i < 64; i++) out[i] ^= prev_in[i];
+    cipher_aux_fwrite(out, 1, read = out[63], &params->output);
+    IV++;
+    memcpy(prev_in, in, 64);
   }
 }
 
