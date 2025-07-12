@@ -388,7 +388,7 @@ static void help(void) {
     "Additional options:\n"
     "  -m, --mode=mode     Set the mode of operation (OFB/CTR).\n"
     "  -k, --key=key       Specify the key file.\n"
-    "Written by Kamila Szewczyk (kspalaiologos@gmail.com).\n"
+    "Written by Kamila Szewczyk (k@iczelia.net).\n"
     "Released to the public domain.\n"
   );
 }
