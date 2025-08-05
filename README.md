@@ -3,7 +3,7 @@ kcrypt3 - an experimental cryptosystem based on the NP-hard polynomial
 reconstruction problem. Released to the public domain by Kamila
 Szewczyk - see COPYING.
 
-Project homepage: https://github.com/kspalaiologos/kcrypt3
+Project homepage: https://github.com/iczelia/kcrypt3
 
 ## Building
 
