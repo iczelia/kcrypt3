@@ -92,8 +92,8 @@ static void keysched(gf in[32], gf k2[64], gf out[32], gf next[32]) {
   lagrange(x, y, 32, coeff);  fisher32(k2, x);
   for (int i = 0; i < 32; i++)
     out[i] = horner(coeff, 31, 64 + x[i]),
-    next[i] = horner(coeff, 31, 128 + x[i]),
-    k2[i] = horner(coeff, 31, 192 + x[i]);
+    next[i] += horner(coeff, 31, 128 + x[i]),
+    k2[i] += horner(coeff, 31, 192 + x[i]);
 }
 static void feistel0(gf L[32], gf R[32], gf k1[3][32], gf k2[64]) {
   for (int round = 0; round < 3; round++) {
