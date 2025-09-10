@@ -76,7 +76,7 @@ y  key[0]+0  key[1]+1  key[2]+2  ...  key[31]+31
   arguments α^64+i, the next key is given by α^128+i, while the
   new permuting state is given by α^192+i.
 
-### Stream cipher
+### Block cipher modes of operation
 
 CTR and OFB modes are supported. A 32-bit IV is always randomly generated.
 
